@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Enhanced Sign Language Detector</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        .container {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+
+        video {
+            border-radius: 10px;
+        }
+
+        #gesture-output {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: white;
+            border-radius: 5px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .confidence-meter {
+            margin-top: 10px;
+            width: 200px;
+            height: 20px;
+            background-color: #ddd;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .confidence-bar {
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+        }
+        .show{
+            width: 200px;
+            height: 25px;
+            text-align: center;
+            left: 50%;
+            margin-top: 20px;
+            background-color: rgb(16, 225, 16);
+            color: wheat;
+        }
+        #nshow{
+            background-color: red;
+            color: black;
+        }
+
+        #reference-image {
+            margin-top: 20px;
+            width: 80%;
+            max-width: 800px;
+            border-radius: 10px;
+            border: 2px solid #ccc;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Enhanced Sign Language Detector</h1>
+    <div class="container">
+        <video id="input-video" width="640" height="480"></video>
+        <canvas id="output-canvas" width="640" height="480"></canvas>
+    </div>
+    <div id="gesture-output">Detected Sign: Waiting for hand...</div>
+    <div class="confidence-meter">
+        <div id="confidence-bar" class="confidence-bar" style="width: 0%"></div>
+    </div>
+    <button class="show" id="show" onclick="view()">show the chart</button>
+    <button class="show" id="nshow" onclick="nview()">off the chart</button>
+    <img id="reference-image" src="WhatsApp Image 2024-12-21 at 11.38.04 AM.jpeg" alt="Sign Language Alphabet">
+
+    <script>
+        const videoElement = document.getElementById('input-video');
+        const canvasElement = document.getElementById('output-canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const gestureOutput = document.getElementById('gesture-output');
+        const confidenceBar = document.getElementById('confidence-bar');
+
+        let lastSpokenGesture = ''; // To track the last spoken gesture
+
+        
+
+        function view() {
+    document.getElementById('reference-image').style.display = "block";
+}
+function nview() {
+    document.getElementById('reference-image').style.display = "none";
+}
+
+        // Speech synthesis function
+        function speakGesture(gesture) {
+            if ('speechSynthesis' in window && gesture !== lastSpokenGesture) {
+                const utterance = new SpeechSynthesisUtterance(gesture);
+                utterance.lang = 'en-US'; // Set language
+                utterance.rate = 0.9; // Slightly slower than normal
+                utterance.pitch = 1.1; // Slightly higher pitch for clarity
+                window.speechSynthesis.speak(utterance);
+                lastSpokenGesture = gesture; // Update last spoken gesture
+            }
+        }
+
+        // Gesture definitions for all letters
+        const gestureDefinitions = {
+            // Example gesture definitions for 'A', 'B', etc.
+            'love': {
+                check: (landmarks) => {
+                    // Example: All fingers closed
+                    return landmarks[4].x < landmarks[3].x &&
+                           landmarks[8].y > landmarks[7].y &&
+                           landmarks[12].y > landmarks[11].y &&
+                           landmarks[16].y > landmarks[15].y &&
+                           landmarks[20].y > landmarks[19].y;
+                },
+                confidence: (landmarks) => 1.0 // Dummy confidence value
+            },
+            'serve': {
+                check: (landmarks) => {
+                    // Example: All fingers extended and close together
+                    return landmarks[8].y < landmarks[5].y &&
+                           landmarks[12].y < landmarks[9].y &&
+                           landmarks[16].y < landmarks[13].y &&
+                           landmarks[20].y < landmarks[17].y &&
+                           Math.abs(landmarks[8].x - landmarks[20].x) < 0.15;
+                },
+                confidence: (landmarks) => 1.0 // Dummy confidence value
+            },
+            // Add definitions for other letters...
+            // Helper function to check relative finger positions for ASL hand signs
+
+    'Give': {
+        check: (landmarks) => {
+            // Hand forms a "C" shape
+            return landmarks[8].x > landmarks[5].x &&
+                   landmarks[4].x < landmarks[8].x &&
+                   landmarks[8].y < landmarks[5].y;
+        },
+        confidence: (landmarks) => 1.0 // Dummy confidence value
+    },
+    'D': {
+        check: (landmarks) => {
+            // Index finger points up, other fingers curled
+            return landmarks[8].y < landmarks[7].y &&
+                   landmarks[12].y > landmarks[11].y &&
+                   landmarks[16].y > landmarks[15].y &&
+                   landmarks[20].y > landmarks[19].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'E': {
+        check: (landmarks) => {
+            // Fingers bent, thumb tucked inside
+            return landmarks[8].y > landmarks[7].y &&
+                   landmarks[12].y > landmarks[11].y &&
+                   landmarks[16].y > landmarks[15].y &&
+                   landmarks[4].x < landmarks[3].x;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'F': {
+        check: (landmarks) => {
+            // Thumb and index form a circle, other fingers extended
+            return Math.abs(landmarks[4].x - landmarks[8].x) < 0.1 &&
+                   Math.abs(landmarks[4].y - landmarks[8].y) < 0.1 &&
+                   landmarks[12].y < landmarks[11].y &&
+                   landmarks[16].y < landmarks[15].y &&
+                   landmarks[20].y < landmarks[19].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'G': {
+        check: (landmarks) => {
+            // Thumb and index pointing outward
+            return landmarks[4].x < landmarks[8].x &&
+                   landmarks[8].y < landmarks[5].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'H': {
+        check: (landmarks) => {
+            // Index and middle fingers extended, pointing outward
+            return landmarks[8].y < landmarks[6].y &&
+                   landmarks[12].y < landmarks[10].y &&
+                   landmarks[16].y > landmarks[14].y &&
+                   landmarks[20].y > landmarks[18].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'I': {
+        check: (landmarks) => {
+            // Pinky finger extended, other fingers curled
+            return landmarks[20].y < landmarks[19].y &&
+                   landmarks[8].y > landmarks[7].y &&
+                   landmarks[12].y > landmarks[11].y &&
+                   landmarks[16].y > landmarks[15].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'J': {
+        check: (landmarks) => {
+            // Pinky finger extended, moves in a "J" shape
+            return landmarks[20].y < landmarks[19].y &&
+                   landmarks[8].y > landmarks[7].y &&
+                   landmarks[12].y > landmarks[11].y &&
+                   landmarks[16].y > landmarks[15].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'K': {
+        check: (landmarks) => {
+            // Thumb, index, and middle finger extended
+            return landmarks[4].x < landmarks[8].x &&
+                   landmarks[8].y < landmarks[6].y &&
+                   landmarks[12].y < landmarks[10].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'L': {
+        check: (landmarks) => {
+            // Thumb and index form an "L"
+            return landmarks[4].x < landmarks[8].x &&
+                   landmarks[8].y < landmarks[6].y &&
+                   landmarks[12].y > landmarks[11].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'M': {
+        check: (landmarks) => {
+            // Thumb crosses under three fingers
+            return landmarks[4].x > landmarks[12].x &&
+                   landmarks[8].x > landmarks[12].x;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'N': {
+        check: (landmarks) => {
+            // Thumb crosses under two fingers
+            return landmarks[4].x > landmarks[8].x &&
+                   landmarks[8].x > landmarks[12].x;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'O': {
+        check: (landmarks) => {
+            // Fingers form an "O" shape
+            return Math.abs(landmarks[4].x - landmarks[8].x) < 0.1 &&
+                   Math.abs(landmarks[4].y - landmarks[8].y) < 0.1 &&
+                   landmarks[12].y > landmarks[11].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'P': {
+        check: (landmarks) => {
+            // Similar to "K" but tilted downward
+            return landmarks[4].x < landmarks[8].x &&
+                   landmarks[8].y > landmarks[6].y &&
+                   landmarks[12].y > landmarks[10].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'Q': {
+        check: (landmarks) => {
+            // Similar to "G" but tilted downward
+            return landmarks[4].x < landmarks[8].x &&
+                   landmarks[8].y > landmarks[5].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'R': {
+        check: (landmarks) => {
+            // Index and middle fingers crossed
+            return Math.abs(landmarks[8].x - landmarks[12].x) < 0.1 &&
+                   landmarks[8].y < landmarks[6].y &&
+                   landmarks[12].y < landmarks[10].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'S': {
+        check: (landmarks) => {
+            // All fingers curled into a fist
+            return landmarks[8].y > landmarks[7].y &&
+                   landmarks[12].y > landmarks[11].y &&
+                   landmarks[16].y > landmarks[15].y &&
+                   landmarks[20].y > landmarks[19].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'T': {
+        check: (landmarks) => {
+            // Thumb tucked under index finger
+            return landmarks[4].x > landmarks[3].x &&
+                   landmarks[8].x > landmarks[4].x;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'U': {
+        check: (landmarks) => {
+            // Index and middle fingers extended and close together
+            return Math.abs(landmarks[8].x - landmarks[12].x) < 0.1 &&
+                   landmarks[8].y < landmarks[6].y &&
+                   landmarks[12].y < landmarks[10].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'V': {
+        check: (landmarks) => {
+            // Index and middle fingers extended and spread apart
+            return Math.abs(landmarks[8].x - landmarks[12].x) > 0.1 &&
+                   landmarks[8].y < landmarks[6].y &&
+                   landmarks[12].y < landmarks[10].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'W': {
+        check: (landmarks) => {
+            // Index, middle, and ring fingers extended
+            return landmarks[8].y < landmarks[6].y &&
+                   landmarks[12].y < landmarks[10].y &&
+                   landmarks[16].y < landmarks[14].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'X': {
+        check: (landmarks) => {
+            // Index finger bent to form an "X"
+            return landmarks[8].y > landmarks[6].y &&
+                   landmarks[8].x < landmarks[6].x;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'Y': {
+        check: (landmarks) => {
+            // Thumb and pinky extended, other fingers curled
+            return landmarks[4].y < landmarks[3].y &&
+                   landmarks[20].y < landmarks[19].y &&
+                   landmarks[8].y > landmarks[7].y;
+        },
+        confidence: (landmarks) => 1.0
+    },
+    'Z': {
+        check: (landmarks) => {
+            // Index finger draws a "Z" motion
+            return landmarks[8].y < landmarks[6].y &&
+                   landmarks[8].x < landmarks[6].x;
+        },
+        confidence: (landmarks) => 1.0
+    }
+
+        };
+
+        function onResults(results) {
+            // Clear the canvas
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            // Draw the video frame
+            canvasCtx.drawImage(
+                results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                // Draw hand landmarks
+                for (const landmarks of results.multiHandLandmarks) {
+                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS,
+                        {color: '#00FF00', lineWidth: 5});
+                    drawLandmarks(canvasCtx, landmarks,
+                        {color: '#FF0000', lineWidth: 2});
+
+                    // Check each gesture
+                    let bestMatch = { gesture: 'Unknown', confidence: 0 };
+                    
+                    for (const [gesture, definition] of Object.entries(gestureDefinitions)) {
+                        if (definition.check(landmarks)) {
+                            const confidence = definition.confidence(landmarks);
+                            if (confidence > bestMatch.confidence) {
+                                bestMatch = { gesture, confidence };
+                            }
+                        }
+                    }
+
+                    // Update UI
+                    const confidencePercent = Math.round(bestMatch.confidence * 100);
+                    gestureOutput.textContent = `Detected Sign: ${bestMatch.gesture} (${confidencePercent}% confident)`;
+                    confidenceBar.style.width = `${confidencePercent}%`;
+
+                    // Speak the gesture
+                    if (confidencePercent >= 70) { // Only speak if confidence is above a threshold
+                        speakGesture(bestMatch.gesture);
+                    }
+                }
+            } else {
+                gestureOutput.textContent = 'Detected Sign: No hand detected';
+                confidenceBar.style.width = '0%';
+            }
+        }
+
+        // Initialize MediaPipe Hands
+        const hands = new Hands({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onResults);
+
+        // Initialize camera
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+
+        camera.start()
+            .then(() => {
+                console.log('Camera started successfully');
+            })
+            .catch(error => {
+                console.error('Error starting camera:', error);
+                gestureOutput.textContent = 'Error: Could not start camera';
+            });
+    </script>
+</body>
+</html>
